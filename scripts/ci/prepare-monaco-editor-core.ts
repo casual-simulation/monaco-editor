@@ -38,7 +38,7 @@ async function prepareMonacoEditorCoreRelease(version: string, vscodeRef: string
 	await rm(dependenciesPath, { force: true, recursive: true });
 
 	await group('Checkout vscode', async () => {
-		await gitShallowClone(vscodePath, 'https://github.com/microsoft/vscode.git', vscodeRef);
+		await gitShallowClone(vscodePath, 'https://github.com/casual-simulation/vscode.git', vscodeRef);
 	});
 	await group('Checkout vscode-loc', async () => {
 		await gitShallowClone(
