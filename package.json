@@ -1,7 +1,7 @@
 {
 	"name": "monaco-editor",
 	"version": "0.34.2",
-	"vscodeRef": "d3fd144ed68af3cce46afaeb1260eee2c76edc77",
+	"vscodeRef": "d9a70c4236a8bde4fe7435df3ecdd333c7bc939c",
 	"private": true,
 	"description": "A browser based code editor",
 	"author": "Microsoft Corporation",
