@@ -8,7 +8,7 @@ requirejs.config({
 	paths: {
 		'vs/fillers/monaco-editor-core': 'out/amd/fillers/monaco-editor-core-amd',
 		'vs/basic-languages': 'out/amd/basic-languages',
-		vs: './node_modules/monaco-editor-core/dev/vs'
+		vs: './node_modules/@casual-simulation/monaco-editor-core/dev/vs'
 	},
 	nodeRequire: require
 });

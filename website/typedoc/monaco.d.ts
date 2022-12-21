@@ -429,13 +429,17 @@ declare namespace monaco {
 
     export interface IMarkdownString {
         readonly value: string;
-        readonly isTrusted?: boolean;
+        readonly isTrusted?: boolean | MarkdownStringTrustedOptions;
         readonly supportThemeIcons?: boolean;
         readonly supportHtml?: boolean;
         readonly baseUri?: UriComponents;
         uris?: {
             [href: string]: UriComponents;
         };
+    }
+
+    export interface MarkdownStringTrustedOptions {
+        readonly enabledCommands: readonly string[];
     }
 
     export interface IKeyboardEvent {
@@ -983,7 +987,7 @@ declare namespace monaco.editor {
     /**
      * Change the language for a model.
      */
-    export function setModelLanguage(model: ITextModel, languageId: string): void;
+    export function setModelLanguage(model: ITextModel, mimeTypeOrLanguageId: string): void;
 
     /**
      * Set the markers for a model.
@@ -1380,6 +1384,7 @@ declare namespace monaco.editor {
         startColumn: number;
         endLineNumber: number;
         endColumn: number;
+        modelVersionId?: number;
         relatedInformation?: IRelatedInformation[];
         tags?: MarkerTag[];
     }
@@ -1399,6 +1404,7 @@ declare namespace monaco.editor {
         startColumn: number;
         endLineNumber: number;
         endColumn: number;
+        modelVersionId?: number;
         relatedInformation?: IRelatedInformation[];
         tags?: MarkerTag[];
     }
@@ -1870,12 +1876,12 @@ declare namespace monaco.editor {
          * @param range The range describing what text length to get.
          * @return The text length.
          */
-        getValueLengthInRange(range: IRange): number;
+        getValueLengthInRange(range: IRange, eol?: EndOfLinePreference): number;
         /**
          * Get the character count of text in a certain range.
          * @param range The range describing what text length to get.
          */
-        getCharacterCountInRange(range: IRange): number;
+        getCharacterCountInRange(range: IRange, eol?: EndOfLinePreference): number;
         /**
          * Get the number of lines in the model.
          */
@@ -2233,6 +2239,124 @@ declare namespace monaco.editor {
      */
     export interface ILineChange extends IChange {
         readonly charChanges: ICharChange[] | undefined;
+    }
+
+    /**
+     * A document diff provider computes the diff between two text models.
+     */
+    export interface IDocumentDiffProvider {
+        /**
+         * Computes the diff between the text models `original` and `modified`.
+         */
+        computeDiff(original: ITextModel, modified: ITextModel, options: IDocumentDiffProviderOptions): Promise<IDocumentDiff>;
+        /**
+         * Is fired when settings of the diff algorithm change that could alter the result of the diffing computation.
+         * Any user of this provider should recompute the diff when this event is fired.
+         */
+        onDidChange: IEvent<void>;
+    }
+
+    /**
+     * Options for the diff computation.
+     */
+    export interface IDocumentDiffProviderOptions {
+        /**
+         * When set to true, the diff should ignore whitespace changes.i
+         */
+        ignoreTrimWhitespace: boolean;
+        /**
+         * A diff computation should throw if it takes longer than this value.
+         */
+        maxComputationTimeMs: number;
+    }
+
+    /**
+     * Represents a diff between two text models.
+     */
+    export interface IDocumentDiff {
+        /**
+         * If true, both text models are identical (byte-wise).
+         */
+        readonly identical: boolean;
+        /**
+         * If true, the diff computation timed out and the diff might not be accurate.
+         */
+        readonly quitEarly: boolean;
+        /**
+         * Maps all modified line ranges in the original to the corresponding line ranges in the modified text model.
+         */
+        readonly changes: LineRangeMapping[];
+    }
+
+    /**
+     * Maps a line range in the original text model to a line range in the modified text model.
+     */
+    export class LineRangeMapping {
+        /**
+         * The line range in the original text model.
+         */
+        readonly originalRange: LineRange;
+        /**
+         * The line range in the modified text model.
+         */
+        readonly modifiedRange: LineRange;
+        /**
+         * If inner changes have not been computed, this is set to undefined.
+         * Otherwise, it represents the character-level diff in this line range.
+         * The original range of each range mapping should be contained in the original line range (same for modified).
+         * Must not be an empty array.
+         */
+        readonly innerChanges: RangeMapping[] | undefined;
+        constructor(originalRange: LineRange, modifiedRange: LineRange, innerChanges: RangeMapping[] | undefined);
+        toString(): string;
+    }
+
+    /**
+     * A range of lines (1-based).
+     */
+    export class LineRange {
+        /**
+         * The start line number.
+         */
+        readonly startLineNumber: number;
+        /**
+         * The end line number (exclusive).
+         */
+        readonly endLineNumberExclusive: number;
+        constructor(startLineNumber: number, endLineNumberExclusive: number);
+        /**
+         * Indicates if this line range is empty.
+         */
+        get isEmpty(): boolean;
+        /**
+         * Moves this line range by the given offset of line numbers.
+         */
+        delta(offset: number): LineRange;
+        /**
+         * The number of lines this line range spans.
+         */
+        get length(): number;
+        /**
+         * Creates a line range that combines this and the given line range.
+         */
+        join(other: LineRange): LineRange;
+        toString(): string;
+    }
+
+    /**
+     * Maps a range in the original text model to a range in the modified text model.
+     */
+    export class RangeMapping {
+        /**
+         * The original range.
+         */
+        readonly originalRange: Range;
+        /**
+         * The modified range.
+         */
+        readonly modifiedRange: Range;
+        constructor(originalRange: Range, modifiedRange: Range);
+        toString(): string;
     }
     export interface IDimension {
         width: number;
@@ -3573,7 +3697,7 @@ declare namespace monaco.editor {
         /**
          * Diff Algorithm
         */
-        diffAlgorithm?: 'smart' | 'experimental';
+        diffAlgorithm?: 'smart' | 'experimental' | IDocumentDiffProvider;
     }
 
     /**
@@ -4238,6 +4362,10 @@ declare namespace monaco.editor {
          */
         shareSuggestSelections?: boolean;
         /**
+         * Select suggestions when triggered via quick suggest or trigger characters
+         */
+        selectQuickSuggestions?: boolean;
+        /**
          * Enable or disable icons in suggestions. Defaults to true.
          */
         showIcons?: boolean;
@@ -4686,13 +4814,13 @@ declare namespace monaco.editor {
         wordWrapColumn: IEditorOption<EditorOption.wordWrapColumn, number>;
         wordWrapOverride1: IEditorOption<EditorOption.wordWrapOverride1, 'on' | 'off' | 'inherit'>;
         wordWrapOverride2: IEditorOption<EditorOption.wordWrapOverride2, 'on' | 'off' | 'inherit'>;
-        wrappingIndent: IEditorOption<EditorOption.wrappingIndent, WrappingIndent>;
-        wrappingStrategy: IEditorOption<EditorOption.wrappingStrategy, 'simple' | 'advanced'>;
         editorClassName: IEditorOption<EditorOption.editorClassName, string>;
         pixelRatio: IEditorOption<EditorOption.pixelRatio, number>;
         tabFocusMode: IEditorOption<EditorOption.tabFocusMode, boolean>;
         layoutInfo: IEditorOption<EditorOption.layoutInfo, EditorLayoutInfo>;
         wrappingInfo: IEditorOption<EditorOption.wrappingInfo, EditorWrappingInfo>;
+        wrappingIndent: IEditorOption<EditorOption.wrappingIndent, WrappingIndent>;
+        wrappingStrategy: IEditorOption<EditorOption.wrappingStrategy, 'simple' | 'advanced'>;
     };
 
     type EditorOptionsType = typeof EditorOptions;
@@ -4828,10 +4956,11 @@ declare namespace monaco.editor {
          */
         position: IPosition | null;
         /**
-         * Optionally, a range can be provided to further
-         * define the position of the content widget.
+         * Optionally, a secondary position can be provided to further
+         * define the position of the content widget. The secondary position
+         * must have the same line number as the primary position.
          */
-        range?: IRange | null;
+        secondaryPosition?: IPosition | null;
         /**
          * Placement preference for position, in order of preference.
          */
@@ -7412,7 +7541,7 @@ declare namespace monaco.languages {
         log?: string;
     }
 
-    export type IMonarchLanguageAction = IShortMonarchLanguageAction | IExpandedMonarchLanguageAction | IShortMonarchLanguageAction[] | IExpandedMonarchLanguageAction[];
+    export type IMonarchLanguageAction = IShortMonarchLanguageAction | IExpandedMonarchLanguageAction | (IShortMonarchLanguageAction | IExpandedMonarchLanguageAction)[];
 
     /**
      * This interface can be shortened as an array, ie. ['{','}','delimiter.curly']

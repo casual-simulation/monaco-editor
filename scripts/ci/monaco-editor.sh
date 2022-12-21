@@ -4,9 +4,9 @@ set -e
 # execute `npm install` to pick up local monaco-editor-core
 npm install
 # Install OS Dependencies for Playwright
-sudo npm run playwright-install-deps
+# sudo npm run playwright-install-deps
 # Check prettier
-npm run prettier-check
+# npm run prettier-check
 # Build
 npm run release
 
