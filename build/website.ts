@@ -92,7 +92,10 @@ function generateWebsite() {
 		}
 
 		let contents = file.contents.toString();
-		contents = contents.replace(/\.\.\/release\/dev/g, 'node_modules/monaco-editor/min');
+		contents = contents.replace(
+			/\.\.\/release\/dev/g,
+			'node_modules/@casual-simulation/monaco-editor/min'
+		);
 		// contents = contents.replace(/\.\.\/\.\.\/release\/dev/g, '../monaco-editor/release/dev');
 		contents = contents.replace(/{{version}}/g, MONACO_EDITOR_VERSION);
 		contents = contents.replace(/{{year}}/g, String(new Date().getFullYear()));
@@ -156,7 +159,7 @@ function generateWebsite() {
 	// temporarily create package.json so that npm install doesn't bark
 	fs.writeFileSync(path.join(REPO_ROOT, '../monaco-editor-website/package.json'), '{}');
 	fs.writeFileSync(path.join(REPO_ROOT, '../monaco-editor-website/.nojekyll'), '');
-	cp.execSync('npm install monaco-editor', {
+	cp.execSync('npm install @casual-simulation/monaco-editor', {
 		cwd: path.join(REPO_ROOT, '../monaco-editor-website')
 	});
 	fs.unlinkSync(path.join(REPO_ROOT, '../monaco-editor-website/package.json'));
