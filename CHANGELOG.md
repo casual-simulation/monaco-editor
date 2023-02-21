@@ -1,5 +1,9 @@
 # Monaco Editor Changelog
 
+## [0.35.1]
+
+- Update TypeScript to v4.9.5
+
 ## [0.35.0]
 
 - Adds sticky scrolling
