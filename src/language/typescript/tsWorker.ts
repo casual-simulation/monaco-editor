@@ -13,6 +13,16 @@ import {
 } from './monaco.contribution';
 import { Uri, worker } from '../../fillers/monaco-editor-core';
 
+type InlayHintsProperties =
+	| 'includeInlayParameterNameHints'
+	| 'includeInlayParameterNameHintsWhenArgumentMatchesName'
+	| 'includeInlayFunctionParameterTypeHints'
+	| 'includeInlayVariableTypeHints'
+	| 'includeInlayPropertyDeclarationTypeHints'
+	| 'includeInlayFunctionLikeReturnTypeHints'
+	| 'includeInlayEnumMemberValueHints';
+type InlayHintsOptions = Pick<ts.UserPreferences, InlayHintsProperties>;
+
 /**
  * Loading a default lib as a source file will mess up TS completely.
  * So our strategy is to hide such a text model from TS.
@@ -38,7 +48,7 @@ export class TypeScriptWorker implements ts.LanguageServiceHost, ITypeScriptWork
 	private _extraLibs: IExtraLibs = Object.create(null);
 	private _languageService = ts.createLanguageService(this);
 	private _compilerOptions: ts.CompilerOptions;
-	private _inlayHintsOptions?: ts.InlayHintsOptions;
+	private _inlayHintsOptions?: InlayHintsOptions;
 
 	constructor(ctx: worker.IWorkerContext, createData: ICreateData) {
 		this._ctx = ctx;
@@ -444,7 +454,7 @@ export class TypeScriptWorker implements ts.LanguageServiceHost, ITypeScriptWork
 		if (fileNameIsLib(fileName)) {
 			return [];
 		}
-		const preferences: ts.InlayHintsOptions = this._inlayHintsOptions ?? {};
+		const preferences: InlayHintsOptions = this._inlayHintsOptions ?? {};
 		const span: ts.TextSpan = {
 			start,
 			length: end - start
@@ -462,7 +472,7 @@ export interface ICreateData {
 	compilerOptions: ts.CompilerOptions;
 	extraLibs: IExtraLibs;
 	customWorkerPath?: string;
-	inlayHintsOptions?: ts.InlayHintsOptions;
+	inlayHintsOptions?: InlayHintsOptions;
 }
 
 /** The shape of the factory */

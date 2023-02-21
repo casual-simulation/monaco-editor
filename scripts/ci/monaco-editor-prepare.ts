@@ -8,6 +8,7 @@ const monacoEditorPackageJsonPath = resolve(rootPath, 'package.json');
 const monacoEditorCorePackageJsonPath = resolve(
 	rootPath,
 	'node_modules',
+	'@casual-simulation',
 	'monaco-editor-core',
 	'package.json'
 );
