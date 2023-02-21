@@ -13,6 +13,7 @@ schedules:
     branches:
       include:
         - main
+    always: true
 
 resources:
   repositories:
@@ -33,7 +34,7 @@ extends:
           - script: npm ci
             displayName: Install NPM dependencies
 
-          - script: yarn ts-node ./scripts/ci/prepare-monaco-editor-core nightly
+          - script: yarn ts-node ./scripts/ci/monaco-editor-core-prepare nightly
             displayName: Setup, Build & Test monaco-editor-core
 
         tag: next
@@ -47,9 +48,23 @@ extends:
           - script: npm ci
             displayName: Install NPM dependencies
 
-          - script: yarn ts-node ./scripts/ci/prepare-monaco-editor nightly
+          - script: yarn ts-node ./scripts/ci/monaco-editor-prepare nightly
             displayName: Setup, Build & Test monaco-editor
 
         tag: next
         publishPackage: true
         publishRequiresApproval: false
+
+        postPublishSteps:
+          - checkout: self
+            persistCredentials: true
+
+          - script: |
+              set -e
+
+              git config user.email "vscode@microsoft.com"
+              git config user.name "VSCode"
+
+              git tag -a v$(SetPackageSpec.PACKAGE_VERSION) -m v$(SetPackageSpec.PACKAGE_VERSION)
+              git push origin v$(SetPackageSpec.PACKAGE_VERSION)
+            workingDirectory: $(Build.SourcesDirectory)

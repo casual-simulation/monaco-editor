@@ -1,8 +1,6 @@
 #!/bin/bash
 set -e
 
-# execute `npm install` to pick up local monaco-editor-core
-npm install
 # Install OS Dependencies for Playwright
 # sudo npm run playwright-install-deps
 # Check prettier
@@ -26,8 +24,5 @@ npm run package-for-smoketest-parcel --prefix test/smoke/parcel
 
 # Run smoke test
 npm run smoketest
-
-# Build website
-npm run build-website
 
 # npm package is now ready to be published in ./release
