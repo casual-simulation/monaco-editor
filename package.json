@@ -1,6 +1,6 @@
 {
 	"name": "@casual-simulation/monaco-editor",
-	"version": "0.35.2",
+	"version": "0.35.3",
 	"vscodeRef": "ead4900887858d10ce888fe58ed29432b24fb387",
 	"private": true,
 	"description": "A browser based code editor",
