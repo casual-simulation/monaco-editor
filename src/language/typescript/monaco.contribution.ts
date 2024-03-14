@@ -6,6 +6,7 @@
 import type * as mode from './tsMode';
 import { typescriptVersion as tsversion } from './lib/typescriptServicesMetadata'; // do not import the whole typescriptServices here
 import { languages, Emitter, IEvent, IDisposable, Uri } from '../../fillers/monaco-editor-core';
+import { ITypeScriptWorkerHost } from './tsWorker';
 
 //#region enums copied from typescript to prevent loading the entire typescriptServices ---
 
@@ -383,6 +384,17 @@ export interface LanguageServiceDefaults {
 	 * Configure inlay hints options.
 	 */
 	setInlayHintsOptions(options: InlayHintsOptions): void;
+
+	/**
+	 * The host for the TypeScript worker.
+	 * @param host The host.
+	 */
+	setTypeScriptWorkerHost(host: ITypeScriptWorkerHost): void;
+
+	/**
+	 * Gets the host for the TypeScript worker.
+	 */
+	getTypeScriptWorkerHost(): ITypeScriptWorkerHost;
 }
 
 export interface TypeScriptWorker {
@@ -562,6 +574,7 @@ class LanguageServiceDefaultsImpl implements LanguageServiceDefaults {
 	private _onDidExtraLibsChangeTimeout: number;
 	private _inlayHintsOptions!: InlayHintsOptions;
 	private _modeConfiguration!: ModeConfiguration;
+	private _host!: ITypeScriptWorkerHost;
 
 	constructor(
 		compilerOptions: CompilerOptions,
@@ -731,6 +744,14 @@ class LanguageServiceDefaultsImpl implements LanguageServiceDefaults {
 	setModeConfiguration(modeConfiguration: ModeConfiguration): void {
 		this._modeConfiguration = modeConfiguration || Object.create(null);
 		this._onDidChange.fire(undefined);
+	}
+
+	setTypeScriptWorkerHost(host: ITypeScriptWorkerHost): void {
+		this._host = host;
+	}
+
+	getTypeScriptWorkerHost(): ITypeScriptWorkerHost {
+		return this._host;
 	}
 }
 

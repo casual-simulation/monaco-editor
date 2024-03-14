@@ -66,6 +66,8 @@ export class WorkerManager {
 
 					keepIdleModels: true,
 
+					host: this._defaults.getTypeScriptWorkerHost(),
+
 					// passed in to the create() method
 					createData: {
 						compilerOptions: this._defaults.getCompilerOptions(),

@@ -41,23 +41,31 @@ function fileNameIsLib(resource: Uri | string): boolean {
 	return false;
 }
 
+export interface ITypeScriptWorkerHost extends Pick<ts.LanguageServiceHost, 'resolveModuleNames'> {}
+
 export class TypeScriptWorker implements ts.LanguageServiceHost, ITypeScriptWorker {
 	// --- model sync -----------------------
 
-	private _ctx: worker.IWorkerContext;
+	private _ctx: worker.IWorkerContext<ITypeScriptWorkerHost>;
 	private _extraLibs: IExtraLibs = Object.create(null);
 	private _languageService = ts.createLanguageService(this);
 	private _compilerOptions: ts.CompilerOptions;
 	private _inlayHintsOptions?: InlayHintsOptions;
 
-	constructor(ctx: worker.IWorkerContext, createData: ICreateData) {
+	constructor(ctx: worker.IWorkerContext<ITypeScriptWorkerHost>, createData: ICreateData) {
 		this._ctx = ctx;
 		this._compilerOptions = createData.compilerOptions;
 		this._extraLibs = createData.extraLibs;
 		this._inlayHintsOptions = createData.inlayHintsOptions;
+
+		if (this._ctx.host && this._ctx.host.resolveModuleNames) {
+			this.resolveModuleNames = ctx.host.resolveModuleNames?.bind(ctx.host);
+		}
 	}
 
 	// --- language service host ---------------
+
+	resolveModuleNames?: ITypeScriptWorkerHost['resolveModuleNames'];
 
 	getCompilationSettings(): ts.CompilerOptions {
 		return this._compilerOptions;
@@ -487,7 +495,10 @@ declare global {
 	var customTSWorkerFactory: CustomTSWebWorkerFactory | undefined;
 }
 
-export function create(ctx: worker.IWorkerContext, createData: ICreateData): TypeScriptWorker {
+export function create(
+	ctx: worker.IWorkerContext<ITypeScriptWorkerHost>,
+	createData: ICreateData
+): TypeScriptWorker {
 	let TSWorkerClass = TypeScriptWorker;
 	if (createData.customWorkerPath) {
 		if (typeof importScripts === 'undefined') {

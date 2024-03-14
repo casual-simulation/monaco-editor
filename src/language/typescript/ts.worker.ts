@@ -4,14 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as edworker from '@casual-simulation/monaco-editor-core/esm/vs/editor/editor.worker';
-import { ICreateData, create } from './tsWorker';
+import { ICreateData, ITypeScriptWorkerHost, create } from './tsWorker';
 import { worker } from '../../fillers/monaco-editor-core';
 
 self.onmessage = () => {
 	// ignore the first message
-	edworker.initialize((ctx: worker.IWorkerContext, createData: ICreateData) => {
-		return create(ctx, createData);
-	});
+	edworker.initialize(
+		(ctx: worker.IWorkerContext<ITypeScriptWorkerHost>, createData: ICreateData) => {
+			return create(ctx, createData);
+		}
+	);
 };
 
 export { create } from './tsWorker';
