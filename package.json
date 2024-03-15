@@ -1,7 +1,7 @@
 {
 	"name": "@casual-simulation/monaco-editor",
-	"version": "0.35.4-alpha.0",
-	"vscodeRef": "ead4900887858d10ce888fe58ed29432b24fb387",
+	"version": "0.35.4-alpha.1",
+	"vscodeRef": "518ddcd0bb764627863b15bf1a19ede30aa727af",
 	"private": true,
 	"description": "A browser based code editor",
 	"homepage": "https://github.com/casual-simulation/monaco-editor",
