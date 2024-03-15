@@ -3,17 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as edworker from '@casual-simulation/monaco-editor-core/esm/vs/editor/editor.worker';
-import { ICreateData, ITypeScriptWorkerHost, create } from './tsWorker';
+import { initialize } from '@casual-simulation/monaco-editor-core/esm/vs/editor/editor.worker';
+import * as ts from './lib/typescriptServices';
+import { ICreateData, ITypeScriptWorkerHost, TypeScriptWorker, create } from './tsWorker';
 import { worker } from '../../fillers/monaco-editor-core';
+import { libFileMap } from './lib/lib';
 
 self.onmessage = () => {
 	// ignore the first message
-	edworker.initialize(
-		(ctx: worker.IWorkerContext<ITypeScriptWorkerHost>, createData: ICreateData) => {
-			return create(ctx, createData);
-		}
-	);
+	initialize((ctx: worker.IWorkerContext<ITypeScriptWorkerHost>, createData: ICreateData) => {
+		return create(ctx, createData);
+	});
 };
 
-export { create } from './tsWorker';
+export { TypeScriptWorker, create, initialize, libFileMap, ts };

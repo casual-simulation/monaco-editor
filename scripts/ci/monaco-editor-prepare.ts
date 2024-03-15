@@ -1,6 +1,7 @@
 import { readFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import { PackageJson, getNightlyVersion, group, run, writeJsonFile, gitCommitId } from '../lib';
+import { getNightlyEnv } from './env';
 
 const selfPath = __dirname;
 const rootPath = join(selfPath, '..', '..');
@@ -24,14 +25,17 @@ async function prepareMonacoEditorReleaseStableOrNightly() {
 	if (arg === 'stable') {
 		version = monacoEditorPackageJson.version;
 	} else if (arg === 'nightly') {
-		version = getNightlyVersion(monacoEditorPackageJson.version);
+		version = getNightlyVersion(
+			monacoEditorPackageJson.version,
+			getNightlyEnv().PRERELEASE_VERSION
+		);
 	} else {
 		throw new Error('Invalid argument');
 	}
 
 	await prepareMonacoEditorRelease(version);
 
-	// npm package is now in ./release, ready to be published
+	// npm package is now in ./out/monaco-editor, ready to be published
 }
 
 async function prepareMonacoEditorRelease(monacoEditorCoreVersion: string) {

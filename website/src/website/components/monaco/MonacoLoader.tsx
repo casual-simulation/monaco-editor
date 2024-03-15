@@ -6,7 +6,7 @@ import { getMonaco, loadMonaco } from "../../../monaco-loader";
  */
 export class MonacoLoader extends React.Component<
 	{ children: (m: typeof monaco) => React.ReactChild },
-	{ monaco: typeof monaco | undefined }
+	{ monaco?: typeof monaco }
 > {
 	constructor(props: any) {
 		super(props);
@@ -26,6 +26,7 @@ export class MonacoLoader extends React.Component<
 		return this.props.children(this.state.monaco);
 	}
 }
+
 /**
  * Decorates a component so that it only gets mounted when monaco is loaded.
  */

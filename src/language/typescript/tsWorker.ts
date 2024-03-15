@@ -50,7 +50,7 @@ export class TypeScriptWorker implements ts.LanguageServiceHost, ITypeScriptWork
 	private _extraLibs: IExtraLibs = Object.create(null);
 	private _languageService = ts.createLanguageService(this);
 	private _compilerOptions: ts.CompilerOptions;
-	private _inlayHintsOptions?: InlayHintsOptions;
+	private _inlayHintsOptions?: ts.UserPreferences;
 
 	constructor(ctx: worker.IWorkerContext<ITypeScriptWorkerHost>, createData: ICreateData) {
 		this._ctx = ctx;
@@ -315,14 +315,15 @@ export class TypeScriptWorker implements ts.LanguageServiceHost, ITypeScriptWork
 		return this._languageService.getQuickInfoAtPosition(fileName, position);
 	}
 
-	async getOccurrencesAtPosition(
+	async getDocumentHighlights(
 		fileName: string,
-		position: number
-	): Promise<ReadonlyArray<ts.ReferenceEntry> | undefined> {
+		position: number,
+		filesToSearch: string[]
+	): Promise<ReadonlyArray<ts.DocumentHighlights> | undefined> {
 		if (fileNameIsLib(fileName)) {
 			return undefined;
 		}
-		return this._languageService.getOccurrencesAtPosition(fileName, position);
+		return this._languageService.getDocumentHighlights(fileName, position, filesToSearch);
 	}
 
 	async getDefinitionAtPosition(
@@ -345,11 +346,11 @@ export class TypeScriptWorker implements ts.LanguageServiceHost, ITypeScriptWork
 		return this._languageService.getReferencesAtPosition(fileName, position);
 	}
 
-	async getNavigationBarItems(fileName: string): Promise<ts.NavigationBarItem[]> {
+	async getNavigationTree(fileName: string): Promise<ts.NavigationTree | undefined> {
 		if (fileNameIsLib(fileName)) {
-			return [];
+			return undefined;
 		}
-		return this._languageService.getNavigationBarItems(fileName);
+		return this._languageService.getNavigationTree(fileName);
 	}
 
 	async getFormattingEditsForDocument(
@@ -460,7 +461,7 @@ export class TypeScriptWorker implements ts.LanguageServiceHost, ITypeScriptWork
 		if (fileNameIsLib(fileName)) {
 			return [];
 		}
-		const preferences: InlayHintsOptions = this._inlayHintsOptions ?? {};
+		const preferences: ts.UserPreferences = this._inlayHintsOptions ?? {};
 		const span: ts.TextSpan = {
 			start,
 			length: end - start
@@ -478,7 +479,7 @@ export interface ICreateData {
 	compilerOptions: ts.CompilerOptions;
 	extraLibs: IExtraLibs;
 	customWorkerPath?: string;
-	inlayHintsOptions?: InlayHintsOptions;
+	inlayHintsOptions?: ts.UserPreferences;
 }
 
 /** The shape of the factory */

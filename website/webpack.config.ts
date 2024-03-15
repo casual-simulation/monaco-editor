@@ -37,6 +37,7 @@ module.exports = {
 			"Access-Control-Allow-Headers":
 				"X-Requested-With, content-type, Authorization",
 		},
+		allowedHosts: "all",
 		watchFiles: [],
 	},
 	module: {
@@ -131,7 +132,7 @@ module.exports = {
 			],
 		}),
 		new CopyPlugin({
-			patterns: [{ from: "../out/", to: "./out/" }],
+			patterns: [{ from: "../out/languages/", to: "./out/languages/" }],
 		}),
 	],
 } as webpack.Configuration;

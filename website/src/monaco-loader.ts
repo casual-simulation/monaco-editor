@@ -21,12 +21,24 @@ export interface IMonacoSetup {
 	monacoTypesUrl: string | undefined;
 }
 
-let loadMonacoPromise: Promise<typeof monaco> | undefined;
+let loading = false;
+let resolve: (value: typeof monaco) => void;
+let reject: (error: unknown) => void;
+let loadMonacoPromise = new Promise<typeof monaco>((res, rej) => {
+	resolve = res;
+	reject = rej;
+});
+
+export async function waitForLoadedMonaco(): Promise<typeof monaco> {
+	return loadMonacoPromise;
+}
+
 export async function loadMonaco(
 	setup: IMonacoSetup = prodMonacoSetup
 ): Promise<typeof monaco> {
-	if (!loadMonacoPromise) {
-		loadMonacoPromise = _loadMonaco(setup);
+	if (!loading) {
+		loading = true;
+		_loadMonaco(setup).then(resolve, reject);
 	}
 	return loadMonacoPromise;
 }
@@ -42,9 +54,6 @@ async function _loadMonaco(setup: IMonacoSetup): Promise<typeof monaco> {
 	global.getCodiconPath = () => {
 		return setup.codiconUrl;
 	};
-
-	console.log("LOADER CONFIG: ");
-	console.log(JSON.stringify(setup.loaderConfigPaths, null, "\t"));
 
 	/** @type {any} */
 	const req = global.require as any;
@@ -75,7 +84,7 @@ function loadScript(path: string): Promise<void> {
 		script.onload = () => res();
 		script.async = true;
 		script.type = "text/javascript";
-		script.src = path;
+		script.src = path; // CodeQL [SM01507] This is safe because the runner (that allows for dynamic paths) runs in an isolated iframe. The hosting website uses a static path configuration. // CodeQL [SM03712] This is safe because the runner (that allows for dynamic paths) runs in an isolated iframe. The hosting website uses a static path configuration.
 		document.head.appendChild(script);
 	});
 }

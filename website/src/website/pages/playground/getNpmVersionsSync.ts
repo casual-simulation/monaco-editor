@@ -6,7 +6,7 @@ export function getNpmVersionsSync(
 	currentVersion: string | undefined
 ): string[] {
 	if (!npmVersionsObservable) {
-		npmVersionsObservable = new ObservablePromise(getNpmVersions());
+		npmVersionsObservable = new ObservablePromise(loadNpmVersions());
 	}
 	return (
 		npmVersionsObservable.value || (currentVersion ? [currentVersion] : [])
@@ -16,6 +16,13 @@ export function getNpmVersionsSync(
 let npmVersionsPromise: Promise<string[]> | undefined;
 
 export async function getNpmVersions(): Promise<string[]> {
+	getNpmVersionsSync(undefined);
+	return npmVersionsPromise!;
+}
+
+getNpmVersions();
+
+async function loadNpmVersions(): Promise<string[]> {
 	if (npmVersionsPromise === undefined) {
 		npmVersionsPromise = _getNpmVersions();
 	}
@@ -52,7 +59,36 @@ async function _getNpmVersions(): Promise<string[]> {
 	]);
 
 	const validVersions = versions.filter((v) => !brokenVersions.has(v));
+
+	validVersions.sort((v1, v2) => -compareSemanticVersions(v1, v2));
+
 	return validVersions;
+}
+
+function compareSemanticVersions(version1: string, version2: string): number {
+	const v1 = version1.split(/[.]/);
+	const v2 = version2.split(/[.]/);
+	for (let i = 0; i < Math.min(v1.length, v2.length); i++) {
+		const isNumber = /^\d+$/.test(v1[i]) && /^\d+$/.test(v2[i]);
+
+		if (isNumber) {
+			const n1 = parseInt(v1[i]);
+			const n2 = parseInt(v2[i]);
+			if (n1 < n2) {
+				return -1;
+			}
+			if (n1 > n2) {
+				return 1;
+			}
+		} else {
+			const compare = v1[i].localeCompare(v2[i]);
+			if (compare !== 0) {
+				return compare;
+			}
+		}
+	}
+
+	return v1.length - v2.length;
 }
 
 export async function getVsCodeCommitId(

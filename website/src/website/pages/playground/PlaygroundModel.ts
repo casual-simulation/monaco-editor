@@ -8,28 +8,19 @@ import {
 	autorun,
 	computed,
 	observable,
-	ObservableMap,
 	reaction,
 	runInAction,
 } from "mobx";
-import { IMonacoSetup, loadMonaco } from "../../../monaco-loader";
+import {
+	IMonacoSetup,
+	loadMonaco,
+	waitForLoadedMonaco,
+} from "../../../monaco-loader";
 import { IPlaygroundProject, IPreviewState } from "../../../shared";
-import { monacoEditorVersion } from "../../monacoEditorVersion";
 import { Debouncer } from "../../utils/Debouncer";
-import { LzmaCompressor } from "../../utils/lzmaCompressor";
-import {
-	HistoryController,
-	IHistoryModel,
-	ILocation,
-} from "../../utils/ObservableHistory";
 import { ObservablePromise } from "../../utils/ObservablePromise";
-import { debouncedComputed, Disposable } from "../../utils/utils";
-import {
-	getNpmVersions,
-	getNpmVersionsSync,
-	getVsCodeCommitId,
-} from "./getNpmVersionsSync";
-import { getPlaygroundExamples, PlaygroundExample } from "./playgroundExamples";
+import { Disposable } from "../../utils/utils";
+import { PlaygroundExample } from "./playgroundExamples";
 import {
 	getDefaultSettings,
 	JsonString,
@@ -37,6 +28,8 @@ import {
 	SettingsModel,
 	toLoaderConfig,
 } from "./SettingsModel";
+import { BisectModel } from "./BisectModel";
+import { LocationModel } from "./LocationModel";
 
 export class PlaygroundModel {
 	public readonly dispose = Disposable.fn();
@@ -54,17 +47,30 @@ export class PlaygroundModel {
 	@observable
 	public reloadKey = 0;
 
-	public readonly serializer = new StateUrlSerializer(this);
+	public readonly historyModel = new LocationModel(this);
 
-	reload(): void {
+	public reload(): void {
 		this.reloadKey++;
 	}
 
-	private readonly _previewHandlers = new Set<IPreviewHandler>();
+	public get previewShouldBeFullScreen(): boolean {
+		return this.settings.previewFullScreen;
+	}
+
+	private _wasEverNonFullScreen = false;
+	public get wasEverNonFullScreen(): boolean {
+		if (this._wasEverNonFullScreen) {
+			return true;
+		}
+		if (!this.settings.previewFullScreen) {
+			this._wasEverNonFullScreen = true;
+		}
+		return this._wasEverNonFullScreen;
+	}
 
 	@computed.struct
 	get monacoSetup(): IMonacoSetup {
-		const sourceOverride = this.serializer.sourceOverride;
+		const sourceOverride = this.historyModel.sourceOverride;
 		if (sourceOverride) {
 			return toLoaderConfig({
 				...getDefaultSettings(),
@@ -87,8 +93,35 @@ export class PlaygroundModel {
 
 	@computed
 	public get state(): IPreviewState {
-		return { ...this.playgroundProject, monacoSetup: this.monacoSetup };
+		return {
+			...this.playgroundProject,
+			monacoSetup: this.monacoSetup,
+			reloadKey: this.reloadKey,
+		};
 	}
+
+	@observable.ref
+	private _previewState: IPreviewState | undefined = undefined;
+
+	public readonly getPreviewState = (): IPreviewState | undefined => {
+		return this._previewState;
+	};
+
+	public readonly getCompareWithPreviewState = ():
+		| IPreviewState
+		| undefined => {
+		const previewState = this.getPreviewState();
+		if (!previewState) {
+			return undefined;
+		}
+		return {
+			...previewState,
+			monacoSetup: toLoaderConfig({
+				...getDefaultSettings(),
+				...this.historyModel.compareWith!.toPartialSettings(),
+			}),
+		};
+	};
 
 	@observable
 	public settingsDialogModel: SettingsDialogModel | undefined = undefined;
@@ -115,33 +148,68 @@ export class PlaygroundModel {
 						example: value,
 						project: p,
 					};
+					this.reloadKey++;
 					this.setState(p);
 				});
 			});
 		}
 	}
 
-	private readonly debouncer = new Debouncer(250);
+	private readonly debouncer = new Debouncer(700);
+
+	@observable
+	public isDirty = false;
 
 	constructor() {
+		let lastState: IPreviewState | undefined = undefined;
+
 		this.dispose.track({
 			dispose: reaction(
-				() => ({ state: this.state, key: this.reloadKey }),
-				({ state }) => {
-					this.debouncer.run(() => {
-						for (const handler of this._previewHandlers) {
-							handler.handlePreview(state);
+				() => ({ state: this.state }),
+				() => {
+					const state = this.state;
+					if (!this.settings.autoReload) {
+						if (
+							(!lastState ||
+								JSON.stringify(state.monacoSetup) ===
+									JSON.stringify(lastState.monacoSetup)) &&
+							state.reloadKey === (lastState?.reloadKey ?? 0)
+						) {
+							this.isDirty = true;
+							return;
 						}
-					});
+					}
+					const updatePreviewState = () => {
+						this.isDirty = false;
+						this._previewState = state;
+						lastState = this._previewState;
+					};
+
+					if (state.reloadKey !== lastState?.reloadKey) {
+						updatePreviewState();
+					} else {
+						this.debouncer.run(updatePreviewState);
+					}
 				},
-				{ name: "update preview" }
+				{ name: "update preview", fireImmediately: true }
 			),
 		});
 
-		const observablePromise = new ObservablePromise(loadMonaco());
+		const observablePromise = new ObservablePromise(waitForLoadedMonaco());
 		let disposable: Disposable | undefined = undefined;
 
-		loadMonaco().then((m) => {
+		waitForLoadedMonaco().then((m) => {
+			this.dispose.track(
+				monaco.editor.addEditorAction({
+					id: "reload",
+					label: "Reload",
+					run: (editor, ...args) => {
+						this.reload();
+					},
+					keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+				})
+			);
+
 			const options =
 				monaco.languages.typescript.javascriptDefaults.getCompilerOptions();
 			monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(
@@ -162,6 +230,8 @@ export class PlaygroundModel {
 						return;
 					}
 					const monacoTypesUrl = this.monacoSetup.monacoTypesUrl;
+					this.reloadKey; // Allow reload to reload the d.ts file.
+
 					let content = "";
 					if (monacoTypesUrl) {
 						content = await (await fetch(monacoTypesUrl)).text();
@@ -182,6 +252,28 @@ export class PlaygroundModel {
 				{ name: "update types" }
 			),
 		});
+	}
+
+	setCodeString(codeStringName: string, value: string) {
+		function escapeRegexpChars(str: string) {
+			return str.replace(/[-[\]/{}()*+?.\\^$|]/g, "\\$&");
+		}
+
+		const regexp = new RegExp(
+			"(\\b" +
+				escapeRegexpChars(codeStringName) +
+				":[^\\w`]*`)([^`\\\\\\n]|\\n|\\\\\\\\|\\\\\\`|\\\\\\$)*`"
+		);
+		const js = this.js;
+		const str = value
+			.replaceAll("\\", "\\\\")
+			.replaceAll("$", "\\$$$$")
+			.replaceAll("`", "\\`");
+		const newJs = js.replace(regexp, "$1" + str + "`");
+		const autoReload = this.settings.autoReload;
+		this.settings.autoReload = false;
+		this.js = newJs;
+		this.settings.autoReload = autoReload;
 	}
 
 	public showSettingsDialog(): void {
@@ -207,21 +299,13 @@ export class PlaygroundModel {
 		this.css = state.css;
 	}
 
-	public setPreviewHandler(handler: IPreviewHandler): monaco.IDisposable {
-		this._previewHandlers.add(handler);
-		handler.handlePreview(this.state);
-		return {
-			dispose: () => {
-				this._previewHandlers.delete(handler);
-			},
-		};
-	}
-
 	public readonly bisectModel = new BisectModel(this);
-}
 
-export interface IPreviewHandler {
-	handlePreview(state: IPreviewState): void;
+	@action
+	compareWithLatestDev(): void {
+		this.settings.previewFullScreen = true;
+		this.historyModel.compareWithLatestDev();
+	}
 }
 
 export class SettingsDialogModel {
@@ -237,421 +321,5 @@ export class SettingsDialogModel {
 
 	constructor(settings: Settings) {
 		this.settings = Object.assign({}, settings);
-	}
-}
-
-function projectEquals(
-	project1: IPlaygroundProject,
-	project2: IPlaygroundProject
-): boolean {
-	return (
-		project1.css === project2.css &&
-		project1.html === project2.html &&
-		project1.js === project2.js
-	);
-}
-
-class StateUrlSerializer implements IHistoryModel {
-	public readonly dispose = Disposable.fn();
-
-	private readonly compressor = new LzmaCompressor<IPlaygroundProject>();
-
-	private cachedState:
-		| { state: IPlaygroundProject; hash: string }
-		| undefined = undefined;
-
-	private readonly computedHashValue = debouncedComputed(
-		500,
-		() => ({
-			state: this.model.playgroundProject,
-			selectedExampleProject: this.model.selectedExampleProject,
-		}),
-		({ state, selectedExampleProject }) => {
-			if (
-				selectedExampleProject &&
-				projectEquals(state, selectedExampleProject.project)
-			) {
-				return "example-" + selectedExampleProject.example.id;
-			}
-			if (
-				this.cachedState &&
-				projectEquals(this.cachedState.state, state)
-			) {
-				return this.cachedState.hash;
-			}
-			return this.compressor.encodeData(state);
-		}
-	);
-
-	private get sourceFromSettings(): Source | undefined {
-		const settings = this.model.settings.settings;
-		if (settings.monacoSource === "npm") {
-			return new Source(settings.npmVersion, undefined, undefined);
-		} else if (
-			settings.monacoSource === "independent" &&
-			((settings.coreSource === "url" &&
-				(settings.languagesSource === "latest" ||
-					settings.languagesSource === "url")) ||
-				(settings.coreSource === "latest" &&
-					settings.languagesSource === "url"))
-		) {
-			return new Source(
-				undefined,
-				settings.coreSource === "url" ? settings.coreUrl : undefined,
-				settings.languagesSource === "latest"
-					? undefined
-					: settings.languagesUrl
-			);
-		} else if (settings.monacoSource === "latest") {
-			return new Source(monacoEditorVersion, undefined, undefined);
-		}
-		return undefined;
-	}
-
-	@observable
-	private _sourceOverride: Source | undefined;
-
-	get sourceOverride(): Source | undefined {
-		return this._sourceOverride;
-	}
-
-	@action
-	disableSourceOverride(): void {
-		this._sourceOverride = undefined;
-		this.historyId++;
-	}
-
-	@action
-	saveSourceOverride(): void {
-		if (this._sourceOverride) {
-			this.model.settings.setSettings({
-				...this.model.settings.settings,
-				...this._sourceOverride.toPartialSettings(),
-			});
-			this.historyId++;
-			this._sourceOverride = undefined;
-		}
-	}
-
-	/**
-	 * This is used to control replace/push state.
-	 * Replace is used if the history id does not change.
-	 */
-	@observable historyId: number = 0;
-
-	get location(): ILocation {
-		const source = this._sourceOverride || this.sourceFromSettings;
-		return {
-			hashValue: this.computedHashValue.value || this.cachedState?.hash,
-			searchParams: {
-				source: source?.sourceToString(),
-				sourceLanguages: source?.sourceLanguagesToString(),
-			},
-		};
-	}
-
-	@action
-	updateLocation(currentLocation: ILocation): void {
-		const hashValue = currentLocation.hashValue;
-		const sourceStr = currentLocation.searchParams.source;
-		const sourceLanguages = currentLocation.searchParams.sourceLanguages;
-		const source =
-			sourceStr || sourceLanguages
-				? Source.parse(sourceStr, sourceLanguages)
-				: undefined;
-
-		if (this.sourceFromSettings?.equals(source)) {
-			this._sourceOverride = undefined;
-		} else {
-			this._sourceOverride = source;
-		}
-
-		if (!hashValue) {
-			this.model.selectedExample = getPlaygroundExamples()[0].examples[0];
-		} else if (hashValue.startsWith("example-")) {
-			const exampleName = hashValue.substring("example-".length);
-			const example = getPlaygroundExamples()
-				.flatMap((e) => e.examples)
-				.find((e) => e.id === exampleName);
-			if (example) {
-				this.model.selectedExample = example;
-			}
-		} else {
-			let p: IPlaygroundProject | undefined = undefined;
-			if (this.cachedState?.hash === hashValue) {
-				p = this.cachedState.state;
-			}
-			if (!p) {
-				try {
-					p =
-						this.compressor.decodeData<IPlaygroundProject>(
-							hashValue
-						);
-				} catch (e) {
-					console.log("Could not deserialize from hash value", e);
-				}
-			}
-			if (p) {
-				this.cachedState = { state: p, hash: hashValue };
-				this.model.setState(p);
-			}
-		}
-	}
-
-	private readonly historyController = this.dispose.track(
-		new HistoryController((initialLocation) => {
-			this.updateLocation(initialLocation);
-			return this;
-		})
-	);
-
-	constructor(private readonly model: PlaygroundModel) {}
-}
-
-class BisectModel {
-	private readonly map = new ObservableMap<string, boolean>();
-
-	constructor(private readonly model: PlaygroundModel) {}
-
-	public getState(version: string): boolean | undefined {
-		return this.map.get(version);
-	}
-
-	public get isActive() {
-		return [...this.map.values()].some((e) => e !== undefined);
-	}
-
-	public reset(): void {
-		this.map.clear();
-	}
-
-	public async toggleState(version: string, state: boolean): Promise<void> {
-		const currentState = this.getState(version);
-		await this.setState(
-			version,
-			currentState === state ? undefined : state
-		);
-	}
-
-	@action
-	public async setState(
-		version: string,
-		state: boolean | undefined
-	): Promise<void> {
-		if (state === undefined) {
-			this.map.delete(version);
-		} else {
-			this.map.set(version, state);
-		}
-
-		const nextVersion = await this.getNextVersion();
-		if (!nextVersion) {
-			return;
-		}
-		this.model.settings.setSettings({
-			...this.model.settings.settings,
-			npmVersion: nextVersion,
-		});
-	}
-
-	private get versions() {
-		return getNpmVersionsSync(undefined);
-	}
-
-	private get indexOfLastBadVersion() {
-		return findLastIndex(this.versions, (v) => this.map.get(v) === false);
-	}
-	private get indexOfFirstGoodVersion() {
-		return this.versions.findIndex((v) => this.map.get(v) === true);
-	}
-
-	public get steps() {
-		const indexOfFirstGoodVersion = this.indexOfFirstGoodVersion;
-		const indexOfLastBadVersion = this.indexOfLastBadVersion;
-
-		if (indexOfFirstGoodVersion === -1 && indexOfLastBadVersion === -1) {
-			return -1;
-		}
-		if (indexOfFirstGoodVersion === -1) {
-			return Math.ceil(
-				Math.log2(this.versions.length - indexOfLastBadVersion)
-			);
-		} else if (indexOfLastBadVersion === -1) {
-			return Math.ceil(Math.log2(indexOfFirstGoodVersion + 1));
-		} else {
-			return Math.ceil(
-				Math.log2(indexOfFirstGoodVersion - indexOfLastBadVersion)
-			);
-		}
-	}
-
-	public get isFinished() {
-		if (
-			this.indexOfFirstGoodVersion !== -1 &&
-			this.indexOfLastBadVersion + 1 === this.indexOfFirstGoodVersion
-		) {
-			return true;
-		}
-		return false;
-	}
-
-	public async openGithub() {
-		const versions = await getNpmVersions();
-		const indexOfFirstGoodVersion =
-			this.indexOfFirstGoodVersion === -1
-				? versions.length - 1
-				: this.indexOfFirstGoodVersion;
-		const indexOfLastBadVersion =
-			this.indexOfLastBadVersion === -1 ? 0 : this.indexOfLastBadVersion;
-		const goodCommitId = await getVsCodeCommitId(
-			versions[indexOfFirstGoodVersion]
-		);
-		const badCommitId = await getVsCodeCommitId(
-			versions[indexOfLastBadVersion]
-		);
-		window.open(
-			`https://github.com/microsoft/vscode/compare/${goodCommitId}...${badCommitId}`,
-			"_blank"
-		);
-	}
-
-	private async getNextVersion(): Promise<string | undefined> {
-		const versions = await getNpmVersions();
-
-		const indexOfFirstGoodVersion = this.indexOfFirstGoodVersion;
-		const indexOfLastBadVersion = this.indexOfLastBadVersion;
-
-		if (
-			indexOfFirstGoodVersion !== -1 &&
-			indexOfLastBadVersion + 1 === indexOfFirstGoodVersion
-		) {
-			// Finished
-			return;
-		}
-
-		if (indexOfLastBadVersion === -1 && indexOfFirstGoodVersion === -1) {
-			return versions[0];
-		}
-		if (indexOfLastBadVersion === -1) {
-			// try first (newest) version that hasn't been tested
-			const indexOfFirstUntestedVersion = versions.findIndex(
-				(v) => this.map.get(v) === undefined
-			);
-			if (indexOfFirstUntestedVersion === -1) {
-				return undefined;
-			}
-			return versions[indexOfFirstUntestedVersion];
-		}
-
-		if (indexOfFirstGoodVersion === -1) {
-			/*// exponential back off, might be good for recent regressions, but ruins step counter
-			const candidate = Math.min(
-				indexOfLastBadVersion * 2 + 1,
-				versions.length - 1
-			);*/
-			const candidate = Math.floor(
-				(indexOfLastBadVersion + versions.length) / 2
-			);
-			return versions[candidate];
-		}
-
-		return versions[
-			Math.floor((indexOfLastBadVersion + indexOfFirstGoodVersion) / 2)
-		];
-	}
-}
-
-function findLastIndex<T>(
-	array: T[],
-	predicate: (value: T) => boolean
-): number {
-	for (let i = array.length - 1; i >= 0; i--) {
-		if (predicate(array[i])) {
-			return i;
-		}
-	}
-	return -1;
-}
-
-class Source {
-	public static parse(
-		sourceStr: string | undefined,
-		sourceLanguagesStr: string | undefined
-	): Source {
-		if (sourceStr && sourceStr.startsWith("v")) {
-			return new Source(
-				sourceStr.substring(1),
-				undefined,
-				sourceLanguagesStr
-			);
-		}
-		return new Source(undefined, sourceStr, sourceLanguagesStr);
-	}
-
-	public equals(other: Source | undefined): boolean {
-		if (!other) {
-			return false;
-		}
-		return other.toString() === this.toString();
-	}
-
-	constructor(
-		public readonly version: string | undefined,
-		public readonly url: string | undefined,
-		public readonly sourceLanguagesStr: string | undefined
-	) {
-		if (
-			version === undefined &&
-			url === undefined &&
-			sourceLanguagesStr === undefined
-		) {
-			throw new Error("one parameter must be defined");
-		}
-	}
-
-	sourceToString(): string | undefined {
-		if (this.url) {
-			return this.url;
-		}
-		if (this.version) {
-			return `v${this.version}`;
-		}
-		return undefined;
-	}
-
-	sourceLanguagesToString(): string | undefined {
-		return this.sourceLanguagesStr;
-	}
-
-	toString() {
-		return `${this.sourceToString()};${this.sourceLanguagesToString()}`;
-	}
-
-	public toPartialSettings(): Partial<Settings> {
-		const languagesSettings: Partial<Settings> = {
-			languagesSource:
-				this.sourceLanguagesStr === undefined ? "latest" : "url",
-			languagesUrl: this.sourceLanguagesStr,
-		};
-
-		if (this.version) {
-			return {
-				monacoSource: "npm",
-				npmVersion: this.version,
-			};
-		} else if (this.url) {
-			return {
-				monacoSource: "independent",
-				coreSource: "url",
-				coreUrl: this.url,
-				...languagesSettings,
-			};
-		} else {
-			return {
-				monacoSource: "independent",
-				coreSource: "latest",
-				...languagesSettings,
-			};
-		}
 	}
 }
