@@ -52,7 +52,7 @@
 		"jsdom": "^19.0.0",
 		"jsonc-parser": "^3.0.0",
 		"mocha": "^9.2.0",
-		"@casual-simulation/monaco-editor-core": "0.35.3",
+		"@casual-simulation/monaco-editor-core": "0.35.4-alpha.1",
 		"parcel": "^2.7.0",
 		"pin-github-action": "^1.8.0",
 		"playwright": "^1.32.2",
@@ -83,6 +83,6 @@
 		"pin-github-action": "^1.8.0",
 		"shelljs": "^0.8.5"
 	},
-	"vscodeCommitId": "5e3b29d81fd4caf763ea014b418327b9730630d1",
-	"monacoCommitId": "f01dac3b63a37fee302c9d6ca9800822a48a94b9"
+	"vscodeCommitId": "518ddcd0bb764627863b15bf1a19ede30aa727af",
+	"monacoCommitId": "832502b3c28b20609fc49892d6a87d23d02f916c"
 }
