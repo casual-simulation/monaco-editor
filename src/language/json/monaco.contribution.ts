@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as mode from './jsonMode';
-import { Emitter, IEvent, languages, Uri } from 'monaco-editor-core';
+import { Emitter, IEvent, languages, Uri } from '@casual-simulation/monaco-editor-core';
 
 // ---- JSON service types ----
 export interface BaseASTNode {

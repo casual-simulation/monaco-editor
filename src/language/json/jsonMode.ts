@@ -139,7 +139,7 @@ export function setupMode(defaults: LanguageServiceDefaults): IDisposable {
 	disposables.push(languages.setLanguageConfiguration(defaults.languageId, richEditConfiguration));
 
 	let modeConfiguration = defaults.modeConfiguration;
-	defaults.onDidChange((newDefaults) => {
+	defaults.onDidChange((newDefaults: any) => {
 		if (newDefaults.modeConfiguration !== modeConfiguration) {
 			modeConfiguration = newDefaults.modeConfiguration;
 			registerProviders();
